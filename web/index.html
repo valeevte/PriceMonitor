@@ -1,0 +1,110 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <title>Price Monitor</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <style>
+    body { font-family: Arial, sans-serif; padding: 20px; max-width: 900px; margin: auto; }
+    input, button { padding: 8px; margin: 4px; }
+    table { width:100%; border-collapse: collapse; margin-top: 12px; }
+    th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+    th { background: #f2f2f2; }
+    .small { font-size: 0.9em; color: #666; }
+  </style>
+</head>
+<body>
+  <h1>Price Monitor</h1>
+
+  <section>
+    <h2>Добавить товар</h2>
+    <form id="addForm">
+      <input id="name" placeholder="Название" required>
+      <input id="url" placeholder="URL товара" required>
+      <button type="submit">Добавить</button>
+    </form>
+    <div id="addResult" class="small"></div>
+  </section>
+
+  <section>
+    <h2>Товары</h2>
+    <table id="productsTable">
+      <thead><tr><th>ID</th><th>Название</th><th>URL</th><th>Тек. цена</th><th>История</th></tr></thead>
+      <tbody></tbody>
+    </table>
+  </section>
+
+  <section id="historySection" style="display:none;">
+    <h2>История цен</h2>
+    <button id="closeHistory">Закрыть</button>
+    <table id="historyTable">
+      <thead><tr><th>Цена</th><th>Дата</th></tr></thead>
+      <tbody></tbody>
+    </table>
+  </section>
+
+<script>
+const apiBase = '/api';
+
+document.getElementById('addForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const name = document.getElementById('name').value.trim();
+  const url  = document.getElementById('url').value.trim();
+  if(!name || !url) return;
+  const res = await fetch(apiBase + '/products', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({name, url})
+  });
+  const data = await res.json();
+  document.getElementById('addResult').textContent = res.ok ? 'Добавлено (ID=' + data.id + ')' : 'Ошибка: ' + (data.error || JSON.stringify(data));
+  document.getElementById('name').value = '';
+  document.getElementById('url').value = '';
+  loadProducts();
+});
+
+async function loadProducts() {
+  const res = await fetch(apiBase + '/products');
+  const list = await res.json();
+  const tbody = document.querySelector('#productsTable tbody');
+  tbody.innerHTML = '';
+  list.forEach(p => {
+    const tr = document.createElement('tr');
+    tr.innerHTML = `<td>${p.id}</td>
+                    <td>${escapeHtml(p.name)}</td>
+                    <td><a href="${escapeHtml(p.url)}" target="_blank">link</a></td>
+                    <td>${p.current_price ? p.current_price.toFixed(2) : '-'}</td>
+                    <td><button data-id="${p.id}" class="historyBtn">Показать</button></td>`;
+    tbody.appendChild(tr);
+  });
+  document.querySelectorAll('.historyBtn').forEach(b => b.addEventListener('click', e => showHistory(e.target.dataset.id)));
+}
+
+async function showHistory(id) {
+  const res = await fetch(apiBase + '/products/' + id + '/history');
+  const data = await res.json();
+  const tbody = document.querySelector('#historyTable tbody');
+  tbody.innerHTML = '';
+  data.forEach(h => {
+    const tr = document.createElement('tr');
+    tr.innerHTML = `<td>${Number(h.price).toFixed(2)}</td><td>${new Date(h.recorded_at).toLocaleString()}</td>`;
+    tbody.appendChild(tr);
+  });
+  document.getElementById('historySection').style.display = 'block';
+}
+
+document.getElementById('closeHistory').addEventListener('click', () => {
+  document.getElementById('historySection').style.display = 'none';
+});
+
+function escapeHtml(s) {
+  if(!s) return '';
+  return s.replace(/[&<>"']/g, (m) => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":"&#039;"}[m]));
+}
+
+// initial load
+loadProducts();
+setInterval(loadProducts, 15000); // refresh every 15s
+</script>
+</body>
+</html>
